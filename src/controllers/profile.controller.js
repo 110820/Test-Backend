@@ -31,10 +31,35 @@ export const getProfile = async (req, res) => {
   }
 };
 
-// SAVE PROFILE
+// SAVE PROFILE (with image upload)
 export const saveProfile = async (req, res) => {
   try {
     const { age, dateOfBirth, address, phone } = req.body;
+    let imageUrl = undefined;
+
+    // Handle image upload if file is present
+    if (req.file) {
+      const uploadParams = {
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: `profile-images/${Date.now()}-${req.file.originalname}`,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+        ACL: "public-read",
+      };
+
+      const upload = new Upload({
+        client: s3Client,
+        params: uploadParams,
+      });
+
+      const result = await upload.done();
+      imageUrl = result.Location;
+    }
+
+    // Update user profileImage if image was uploaded
+    if (imageUrl) {
+      await User.findByIdAndUpdate(req.user._id, { profileImage: imageUrl });
+    }
 
     let profile = await Profile.findOne({ user: req.user._id });
 
@@ -51,13 +76,23 @@ export const saveProfile = async (req, res) => {
       profile.dateOfBirth = dateOfBirth;
       profile.address = address;
       profile.phone = phone;
-
       await profile.save();
     }
 
-    res.status(200).json(profile);
+    // Fetch updated user for response
+    const user = await User.findById(req.user._id);
 
+    res.status(200).json({
+      message: "Profile saved",
+      profile,
+      user: {
+        name: user.name,
+        email: user.email,
+        profileImage: user.profileImage,
+      },
+    });
   } catch (error) {
+    console.error("Profile save error:", error);
     res.status(500).json({ message: "Profile save failed" });
   }
 };

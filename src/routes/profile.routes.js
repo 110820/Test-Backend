@@ -12,8 +12,8 @@ const router = express.Router();
 // GET PROFILE
 router.get("/", protect, getProfile);
 
-// SAVE PROFILE
-router.post("/", protect, saveProfile);
+// SAVE PROFILE (with image upload)
+router.post("/", protect, upload.single("image"), saveProfile);
 
 // UPDATE IMAGE
 router.put("/image", protect, upload.single("image"), updateProfileImage);
