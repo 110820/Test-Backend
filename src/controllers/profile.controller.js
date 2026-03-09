@@ -1,5 +1,18 @@
 import Profile from "../models/profile.model.js";
 import User from "../models/user.model.js";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
 
 // GET PROFILE
 export const getProfile = async (req, res) => {
@@ -59,7 +72,24 @@ export const updateProfileImage = async (req, res) => {
     }
 
     if (req.file) {
-      user.profileImage = req.file.filename;
+      // Upload to S3
+      const uploadParams = {
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: `profile-images/${Date.now()}-${req.file.originalname}`,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+        ACL: "public-read",
+      };
+
+      const upload = new Upload({
+        client: s3Client,
+        params: uploadParams,
+      });
+
+      const result = await upload.done();
+      const imageUrl = result.Location;
+
+      user.profileImage = imageUrl;
       await user.save();
     }
 
@@ -69,6 +99,7 @@ export const updateProfileImage = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("S3 upload error:", error);
     res.status(500).json({ message: "Image update failed" });
   }
 };
